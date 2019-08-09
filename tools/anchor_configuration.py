@@ -22,10 +22,11 @@ serial_port = ''
 # adding None will cause the local device to be configured for the anchors as well.
 tag_ids = [None]
 
-anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-155, 12210, 1500)),
-            DeviceCoordinates(0x6a19, 1, Coordinates(5170, 11572, 2900)),
+anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-108, 12145, 2900)),
+            DeviceCoordinates(0x6a19, 1, Coordinates(5113, 11617, 2900)),
             DeviceCoordinates(0x6a6b, 1, Coordinates(0, 0, 2900)),
-            DeviceCoordinates(0x676d, 1, Coordinates(4330, 0, 2900))]
+            DeviceCoordinates(0x676d, 1, Coordinates(4339, 0, 2800)),
+            DeviceCoordinates(0x6a40, 1, Coordinates(672, 5127, 100))]
 
 
 def set_anchor_configuration(port):
