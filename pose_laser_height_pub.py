@@ -2,11 +2,7 @@
 """
 ROS node that publishes the pose (position + quaternion) of the Pozyx
 
-This is an example of how to combine sensor data and positioning into a single
-channel output.
-
-Quite overkill using _Pose, as this consists of 7 float64s, while the source
-data comes from integers. Suggestions to replace this are quite welcomed.
+Quaternion of Pozyx is not recommended to use with drones because of floating yaw of the Pozyx IMU
 """
 
 import pypozyx
@@ -21,10 +17,8 @@ remote_id = None
 serial_port = ''
 # Enable or disable logging
 enable_logging = False
-
+# Global variable to collect data from lazer
 distance = 0.0
-
-#!/usr/bin/env python
 
 def callback(data):
     global distance
