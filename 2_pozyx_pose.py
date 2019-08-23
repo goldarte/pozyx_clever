@@ -11,12 +11,22 @@ import rospy
 from geometry_msgs.msg import Point, PoseStamped, Quaternion
 from tf.transformations import quaternion_from_euler
 from sensor_msgs.msg import Range
-from math import atan2
+from math import *
 import argparse
+import copy
 
 
 remote_id = None
-
+# Distance between tags, m
+tag_distance = 0.4
+# Relative rotation, degrees
+tag_rot = 0.
+# Pozyx measurement error, m
+pozyx_error = 0.4
+# Maximum copter speed, m/s
+max_speed = 5.
+# Maximum copter rotation speed, deg/s
+max_rot_speed = 50.
 # Enable or disable logging
 enable_logging = False
 # Global variable to collect data from lazer
@@ -50,23 +60,41 @@ def pozyx_pose_pub(port1, port2):
     except:
         rospy.loginfo("Pozyx 2 not connected")
         return
+    
+    pos1 = Coordinates()
+    pos2 = Coordinates()
+    pose = PoseStamped()
+    pose.header.frame_id = "map"
+    pose.header.stamp = rospy.Time.now()
+    yaw = 0.
+    pos1_old = copy.copy(pos1)
+    pos2_old = copy.copy(pos2)
+    yaw_old = 0.
+
     while not rospy.is_shutdown():
-        pos1 = Coordinates()
-        pos2 = Coordinates()
-        pose = PoseStamped()
-        pose.header.frame_id = "map"
 
         status1 = pozyx1.doPositioning(pos1, dimension=dimension, algorithm=algorithm)
-        if status1 == POZYX_SUCCESS:
+        time_delta1 = (rospy.Time.now() - pose.header.stamp).to_sec()
+        if (status1 == POZYX_SUCCESS and distance_2d(pos1, pos1_old) < time_delta1*max_speed):
             status2 = pozyx2.doPositioning(pos2, dimension=dimension, algorithm=algorithm)
-            if status2 == POZYX_SUCCESS:
+            time_delta2 = (rospy.Time.now() - pose.header.stamp).to_sec()
+            yaw = atan2(pos2.y-pos1.y, pos2.x-pos1.x) + radians(tag_rot)
+            if (status2 == POZYX_SUCCESS and distance_2d(pos2, pos2_old) < time_delta2*max_speed
+            and distance_2d(pos1, pos2) < tag_distance + 2*pozyx_error
+            and abs(degrees(yaw-yaw_old)) < time_delta2*max_rot_speed):    # simple out-of-range value filter
                 pose.pose.position = Point((pos1.x+pos2.x)/1000., (pos1.y+pos2.y)/1000., distance)
-                pose.pose.orientation = Quaternion(*quaternion_from_euler(0, 0, atan2(pos2.y-pos1.y, pos2.x-pos1.x)))
-                #print pose.pose.position
+                pose.pose.orientation = Quaternion(*quaternion_from_euler(0, 0, yaw))
                 pose.header.stamp = rospy.Time.now()
                 pub.publish(pose)
+                #print distance_2d(pos1, pos1_old), time_delta1*max_speed, distance_2d(pos2, pos2_old), time_delta2*max_speed, distance_2d(pos1, pos2), tag_distance + 2*pozyx_error, yaw_old, yaw  
+                pos1_old = copy.copy(pos1)
+                pos2_old = copy.copy(pos2)
+                yaw_old = yaw
                 if enable_logging:
-                    rospy.loginfo("POS: %s, QUAT: %s" % (str(pos1), str(pos2)))
+                    rospy.loginfo("POS: %s, QUAT: %s" % (str(pose.pose.position), str(pose.pose.orientation)))
+
+def distance_2d(pos1, pos2):
+    return sqrt((pos1.x-pos2.x)**2 + (pos1.y-pos2.y)**2)/1000.
 
 def set_anchor_configuration(port1, port2):
     rospy.init_node('uwb_configurator')
@@ -94,7 +122,7 @@ if __name__ == '__main__':
 
     rospy.Subscriber("/mavros/distance_sensor/rangefinder_sub", Range, callback)
     
-    parser = argparse.ArgumentParser(description='Send Pose_Stamped message, counted from 2 pozyx tags')
+    parser = argparse.ArgumentParser(description='Send PoseStamped message, counted from 2 pozyx tags')
     parser.add_argument("-p1", "--port1", type=str, default='/dev/ttyACM1',
                         help="sets the uart port of the first pozyx")
     parser.add_argument("-p2", "--port2", type=str, default='/dev/ttyACM2',
