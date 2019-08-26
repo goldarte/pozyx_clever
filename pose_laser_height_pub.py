@@ -1,78 +1,105 @@
 #!/usr/bin/env python
 """
-ROS node that publishes the pose (position + quaternion) of the Pozyx
+ROS node that publishes PoseStamped message with position of the Pozyx
 
 Quaternion of Pozyx is not recommended to use with drones because of floating yaw of the Pozyx IMU
 """
 
-import pypozyx
+from pypozyx import (PozyxConstants, PozyxRegisters, DeviceCoordinates,
+                    PozyxSerial, Coordinates, POZYX_SUCCESS, POZYX_ANCHOR_SEL_AUTO,
+                    get_first_pozyx_serial_port)
 import rospy
 from geometry_msgs.msg import Point, PoseStamped, Quaternion
 from sensor_msgs.msg import Range
 import argparse
 
+# Pozyx object and remote_id
 remote_id = None
-
+pozyx = None
 # Set serial port or leave it empty to make auto connect
 serial_port = ''
 # Enable or disable logging
 enable_logging = False
 # Global variable to collect data from lazer
 distance = 0.0
+# Anchors data for calibration
+anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-108, 12145, 2900)),
+            DeviceCoordinates(0x6a19, 1, Coordinates(5113, 11617, 2900)),
+            DeviceCoordinates(0x6a6b, 1, Coordinates(0, 0, 2900)),
+            DeviceCoordinates(0x676d, 1, Coordinates(4339, 0, 2800)),
+            DeviceCoordinates(0x6a40, 1, Coordinates(672, 5127, 100))]
+# Positioning algorithm. Variants: POSITIONING_ALGORITHM_UWB_ONLY, POSITIONING_ALGORITHM_TRACKING
+algorithm = PozyxConstants.POSITIONING_ALGORITHM_UWB_ONLY
+# Positioning dimension. Variants: DIMENSION_2D, DIMENSION_2_5D, DIMENSION_3D
+dimension = PozyxConstants.DIMENSION_3D
+# Positioning filter. Variants: FILTER_TYPE_NONE, FILTER_TYPE_MOVING_AVERAGE, FILTER_TYPE_MOVING_MEDIAN and FILTER_TYPE_FIR 
+filtering = PozyxConstants.FILTER_TYPE_NONE
 
-def callback(data):
+def distance_callback(data):
     global distance
     distance = data.range
 
-def pozyx_pose_pub(port):
+def pozyx_pose_pub(pozyx):
     global distance
     pub = rospy.Publisher('/mavros/vision_pose/pose', PoseStamped, queue_size=40)
-    try:
-        pozyx = pypozyx.PozyxSerial(port)
-    except:
-        rospy.loginfo("Pozyx not connected")
-        return
     while not rospy.is_shutdown():
-        coords = pypozyx.Coordinates()
-        quat = pypozyx.Quaternion()
+        pos = Coordinates()
         pose = PoseStamped()
+        pose.pose.orientation = Quaternion(0, 0, 0, 1)
         pose.header.frame_id = "map"
-        status = pozyx.doPositioning(coords, pypozyx.POZYX_3D, remote_id=remote_id)
-        if status == pypozyx.POZYX_SUCCESS:
-            pozyx.getQuaternion(quat, remote_id=remote_id)
-            pose.pose.position = Point(coords.x/1000., coords.y/1000., distance)
-            pose.pose.orientation = Quaternion(quat.x, quat.y, quat.z, quat.w)
+        pozyx.setPositionAlgorithm(algorithm=filtering, dimension=dimension)
+        status = pozyx.doPositioning(pos, dimension=dimension, algorithm=algorithm, remote_id=remote_id)
+        if status == POZYX_SUCCESS:
+            pose.pose.position = Point(pos.x/1000., pos.y/1000., distance)
             pose.header.stamp = rospy.Time.now()
             pub.publish(pose)
             if enable_logging:
-                rospy.loginfo("POS: %s, QUAT: %s" % (str(coords), str(quat)))
+                rospy.loginfo("POS: %s" % str(pos))
 
+def set_anchor_configuration(pozyx):
+    settings_registers = [0x16, 0x17]  # POS ALG and NUM ANCHORS
+    for anchor in anchors:
+        pozyx.addDevice(anchor, remote_id)
+    if len(anchors) > 4:
+        pozyx.setSelectionOfAnchors(POZYX_ANCHOR_SEL_AUTO, len(anchors))
+        pozyx.saveRegisters(settings_registers)
+    pozyx.saveNetwork(remote_id)
 
 if __name__ == '__main__':
 
     rospy.init_node('pozyx_pose_node')
 
-    rospy.Subscriber("/mavros/distance_sensor/rangefinder_sub", Range, callback)
-    
+    rospy.Subscriber("/mavros/distance_sensor/rangefinder_sub", Range, distance_callback)
+
+    # Add parser
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=str,
                         help="sets the uart port of pozyx, use first pozyx device if empty")
     args = parser.parse_args()
 
+    # Set up serial port
     if args.port:
         serial_port = args.port
 
-    # shortcut to not have to find out the port yourself
     if serial_port == '':
-        serial_port = pypozyx.get_first_pozyx_serial_port()
+        serial_port = get_first_pozyx_serial_port()
         print(serial_port)
         if serial_port is None:
             print("No Pozyx connected. Check your USB cable or your driver!")
             quit()
-    
-    try:
-        pozyx_pose_pub(serial_port)
-    except rospy.ROSInterruptException:
-        pass
 
-    rospy.spin()
+    # Connect to pozyx and get pozyx object
+    try:
+        pozyx = PozyxSerial(serial_port)
+    except:
+        rospy.loginfo("Pozyx not connected")
+        quit()
+
+    if pozyx is not None:
+
+        set_anchor_configuration(pozyx)
+    
+        try:
+            pozyx_pose_pub(pozyx)
+        except rospy.ROSInterruptException:
+            quit()
