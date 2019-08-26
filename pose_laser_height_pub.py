@@ -33,7 +33,9 @@ algorithm = PozyxConstants.POSITIONING_ALGORITHM_UWB_ONLY
 # Positioning dimension. Variants: DIMENSION_2D, DIMENSION_2_5D, DIMENSION_3D
 dimension = PozyxConstants.DIMENSION_3D
 # Positioning filter. Variants: FILTER_TYPE_NONE, FILTER_TYPE_MOVING_AVERAGE, FILTER_TYPE_MOVING_MEDIAN and FILTER_TYPE_FIR 
-filtering = PozyxConstants.FILTER_TYPE_NONE
+filter_type = PozyxConstants.FILTER_TYPE_MOVING_MEDIAN
+# Filter strength. Integer from 0 to 15.
+filter_strength = 5
 
 def distance_callback(data):
     global distance
@@ -42,12 +44,14 @@ def distance_callback(data):
 def pozyx_pose_pub(pozyx):
     global distance
     pub = rospy.Publisher('/mavros/vision_pose/pose', PoseStamped, queue_size=40)
+    pozyx.setPositionAlgorithm(algorithm=algorithm, dimension=dimension)
+    pozyx.setPositionFilter(filter_type=filter_type, filter_strength=filter_strength)
+    pos = Coordinates()
+    pose = PoseStamped()
+    pose.pose.orientation = Quaternion(0, 0, 0, 1)
+    pose.header.frame_id = "map"
+
     while not rospy.is_shutdown():
-        pos = Coordinates()
-        pose = PoseStamped()
-        pose.pose.orientation = Quaternion(0, 0, 0, 1)
-        pose.header.frame_id = "map"
-        pozyx.setPositionAlgorithm(algorithm=filtering, dimension=dimension)
         status = pozyx.doPositioning(pos, dimension=dimension, algorithm=algorithm, remote_id=remote_id)
         if status == POZYX_SUCCESS:
             pose.pose.position = Point(pos.x/1000., pos.y/1000., distance)
