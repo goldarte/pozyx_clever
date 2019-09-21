@@ -23,11 +23,20 @@ enable_logging = False
 # Global variable to collect data from lazer
 distance = 0.0
 # Anchors data for calibration
+
+''' COEX Soft Office 
 anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-108, 12145, 2900)),
             DeviceCoordinates(0x6a19, 1, Coordinates(5113, 11617, 2900)),
             DeviceCoordinates(0x6a6b, 1, Coordinates(0, 0, 2900)),
             DeviceCoordinates(0x676d, 1, Coordinates(4339, 0, 2800)),
             DeviceCoordinates(0x6a40, 1, Coordinates(672, 5127, 100))]
+'''
+
+anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(68, 5475, 150)),
+            DeviceCoordinates(0x6a19, 1, Coordinates(5280, 5486, 150)),
+            DeviceCoordinates(0x6a6b, 1, Coordinates(-1, 0, 150)),
+            DeviceCoordinates(0x676d, 1, Coordinates(5551, 1, 2800))]
+
 # Positioning algorithm. Variants: POSITIONING_ALGORITHM_UWB_ONLY, POSITIONING_ALGORITHM_TRACKING
 algorithm = PozyxConstants.POSITIONING_ALGORITHM_UWB_ONLY
 # Positioning dimension. Variants: DIMENSION_2D, DIMENSION_2_5D, DIMENSION_3D

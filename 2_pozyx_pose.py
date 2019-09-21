@@ -20,13 +20,13 @@ remote_id = None
 # Distance between tags, m
 tag_distance = 0.4
 # Relative rotation, degrees
-tag_rot = 0.
+tag_rot = -3.
 # Pozyx measurement error, m
-pozyx_error = 0.4
+pozyx_error = 0.3
 # Maximum copter speed, m/s
-max_speed = 5.
+max_speed = 10.
 # Maximum copter rotation speed, deg/s
-max_rot_speed = 50.
+max_rot_speed = 400
 # Enable or disable logging
 enable_logging = False
 # Global variable to collect data from lazer
@@ -42,6 +42,8 @@ anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-108, 12145, 2900)),
 algorithm = PozyxConstants.POSITIONING_ALGORITHM_UWB_ONLY
 # Positioning dimension. Others are PozyxConstants.DIMENSION_2D, PozyxConstants.DIMENSION_2_5D
 dimension = PozyxConstants.DIMENSION_3D
+#filter type
+filter = PozyxConstants.FILTER_TYPE_MOVING_AVERAGE
 
 def callback(data):
     global distance
@@ -60,7 +62,8 @@ def pozyx_pose_pub(port1, port2):
     except:
         rospy.loginfo("Pozyx 2 not connected")
         return
-    
+    pozyx1.setPositionFilter(filter,3)
+    pozyx2.setPositionFilter(filter,3)
     pos1 = Coordinates()
     pos2 = Coordinates()
     pose = PoseStamped()
