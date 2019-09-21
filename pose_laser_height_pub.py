@@ -12,6 +12,7 @@ import rospy
 from geometry_msgs.msg import Point, PoseStamped, Quaternion
 from sensor_msgs.msg import Range
 import argparse
+import csv
 
 # Pozyx object and remote_id
 remote_id = None
@@ -23,6 +24,8 @@ enable_logging = False
 # Global variable to collect data from lazer
 distance = 0.0
 # Anchors data for calibration
+height = 150                        # Height of each anchow in mm
+csv_path = 'anchors-20190925.csv'   # Path to anchor calibration data 
 
 ''' COEX Soft Office 
 anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-108, 12145, 2900)),
@@ -32,11 +35,6 @@ anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(-108, 12145, 2900)),
             DeviceCoordinates(0x6a40, 1, Coordinates(672, 5127, 100))]
 '''
 
-anchors = [DeviceCoordinates(0x6a11, 1, Coordinates(68, 5475, 150)),
-            DeviceCoordinates(0x6a19, 1, Coordinates(5280, 5486, 150)),
-            DeviceCoordinates(0x6a6b, 1, Coordinates(-1, 0, 150)),
-            DeviceCoordinates(0x676d, 1, Coordinates(5551, 1, 2800))]
-
 # Positioning algorithm. Variants: POSITIONING_ALGORITHM_UWB_ONLY, POSITIONING_ALGORITHM_TRACKING
 algorithm = PozyxConstants.POSITIONING_ALGORITHM_UWB_ONLY
 # Positioning dimension. Variants: DIMENSION_2D, DIMENSION_2_5D, DIMENSION_3D
@@ -45,6 +43,24 @@ dimension = PozyxConstants.DIMENSION_3D
 filter_type = PozyxConstants.FILTER_TYPE_MOVING_MEDIAN
 # Filter strength. Integer from 0 to 15.
 filter_strength = 5
+
+def read_calibration_file(filepath):
+    anchors = []
+    try:
+        calibration_file = open(filepath)
+    except IOError:
+        rospy.logerror("File {} can't be opened".format(filepath))
+        quit()
+    else:
+        with calibration_file:
+            csv_reader = csv.reader(
+                calibration_file, delimiter=';', quotechar='"'
+            )
+            row_0 = csv_reader.next()
+            for row in csv_reader:  #id;hexId;x;y;z;
+                id, hexId, x, y, z = row[:5]
+                anchors.append(DeviceCoordinates(int(id), 1, Coordinates(int(x), int(y), int(z))))
+    return anchors
 
 def distance_callback(data):
     global distance
@@ -69,7 +85,7 @@ def pozyx_pose_pub(pozyx):
             if enable_logging:
                 rospy.loginfo("POS: %s" % str(pos))
 
-def set_anchor_configuration(pozyx):
+def set_anchor_configuration(pozyx, anchors):
     settings_registers = [0x16, 0x17]  # POS ALG and NUM ANCHORS
     for anchor in anchors:
         pozyx.addDevice(anchor, remote_id)
@@ -110,7 +126,8 @@ if __name__ == '__main__':
 
     if pozyx is not None:
 
-        set_anchor_configuration(pozyx)
+        anchors = read_calibration_file(csv_path)
+        set_anchor_configuration(pozyx, anchors)
     
         try:
             pozyx_pose_pub(pozyx)
